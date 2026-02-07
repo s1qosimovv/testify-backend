@@ -74,11 +74,13 @@ MATN:
     # Parse JSON
     try:
         # Try a list of models in order of preference
-        models_to_try = [settings.GEMINI_MODEL, "gemini-flash-latest", "gemini-pro-latest"]
+        models_to_try = [settings.GEMINI_MODEL, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
         content = None
         last_error = ""
+        is_rate_limit = False
 
         for model_name in models_to_try:
+            if not model_name: continue
             try:
                 print(f"DEBUG: Attempting with {model_name}...")
                 model = genai.GenerativeModel(model_name)
@@ -90,10 +92,20 @@ MATN:
             except Exception as e:
                 last_error = str(e)
                 print(f"DEBUG: Model {model_name} failed: {last_error}")
+                if "429" in last_error or "quota" in last_error.lower():
+                    is_rate_limit = True
+                    # If it's a rate limit, don't spam other models immediately,
+                    # but maybe the next one in the list has a separate quota.
+                    await asyncio.sleep(1) 
                 continue
         
         if not content:
-             raise HTTPException(status_code=500, detail=f"Barcha AI modellari band yoki xato berdi: {last_error}")
+            if is_rate_limit:
+                raise HTTPException(
+                    status_code=429, 
+                    detail="Gemini AI limiti tugadi (Free Tier). Iltimos, 1 daqiqa kuting yoki boshqa matn yuboring. ⏳"
+                )
+             raise HTTPException(status_code=500, detail=f"AI band: {last_error[:100]}")
 
         # Clean up Markdown code blocks
         if "```json" in content:

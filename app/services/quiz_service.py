@@ -35,47 +35,49 @@ def evaluate_answers(quiz: Quiz, submission: AnswerSubmission) -> QuizResult:
         percentage=percentage
     )
 
+import json
+import os
+import uuid
+
+# Storage path
+STORAGE_FILE = "quizzes.json"
+
+def _load_storage():
+    """Load storage from file"""
+    if not os.path.exists(STORAGE_FILE):
+        return {}
+    try:
+        with open(STORAGE_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def _save_storage(data):
+    """Save storage to file"""
+    try:
+        with open(STORAGE_FILE, "w") as f:
+            json.dump(data, f)
+    except:
+        pass
+
 def store_quiz_in_memory(quiz: Quiz) -> str:
     """
-    Store quiz in memory and return an ID
-    For MVP, we'll use a simple in-memory dict
-    In production, use Redis or database
-    
-    Args:
-        quiz: Quiz to store
-        
-    Returns:
-        Quiz ID
+    Store quiz in a file to survive reloads
     """
-    import uuid
     quiz_id = str(uuid.uuid4())
-    
-    # Global in-memory storage (for MVP only)
-    if not hasattr(store_quiz_in_memory, 'storage'):
-        store_quiz_in_memory.storage = {}
-    
-    store_quiz_in_memory.storage[quiz_id] = quiz
+    storage = _load_storage()
+    storage[quiz_id] = quiz.dict()
+    _save_storage(storage)
     return quiz_id
 
 def get_quiz_from_memory(quiz_id: str) -> Quiz:
     """
-    Retrieve quiz from memory by ID
-    
-    Args:
-        quiz_id: Quiz identifier
-        
-    Returns:
-        Quiz object
-        
-    Raises:
-        HTTPException: If quiz not found
+    Retrieve quiz from file by ID
     """
-    if not hasattr(store_quiz_in_memory, 'storage'):
+    storage = _load_storage()
+    quiz_data = storage.get(quiz_id)
+    
+    if not quiz_data:
         raise HTTPException(status_code=404, detail="Quiz not found")
     
-    quiz = store_quiz_in_memory.storage.get(quiz_id)
-    
-    if not quiz:
-        raise HTTPException(status_code=404, detail="Quiz not found")
-    
-    return quiz
+    return Quiz(**quiz_data)

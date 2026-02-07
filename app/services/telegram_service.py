@@ -1,121 +1,138 @@
 import os
 import asyncio
-from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup, Poll
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from app.services.quiz_service import get_quiz_from_memory
-from app.models.quiz import Quiz
+import logging
 import threading
-
 from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup, Poll, ReplyKeyboardMarkup, WebAppInfo
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 from app.services.quiz_service import get_quiz_from_memory
 from app.models.quiz import Quiz
-import threading
+
+# Configure logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 class TelegramQuizBot:
     def __init__(self):
         self.token = os.getenv("TELEGRAM_BOT_TOKEN")
-        self.app_url = os.getenv("WEB_APP_URL", "http://localhost:5000") # Production URL needed later
+        self.app_url = os.getenv("WEB_APP_URL", "https://s1qosimovv.github.io/testify-frontend/")
         self.application = None
         self.is_running = False
 
     async def set_menu_button(self):
-        # Set the main bot menu button to open the Web App
-        await self.application.bot.set_chat_menu_button(
-            menu_button={"type": "web_app", "text": "Ilovani Ochish", "web_app": {"url": self.app_url}}
-        )
-
-    async def start_bot(self):
-        if not self.token or self.token == "your-telegram-bot-token-here":
-            print("Telegram Bot Token topilmadi. Telegram funksiyalari o'chirilgan.")
-            return
-
-        self.application = ApplicationBuilder().token(self.token).build()
-        
-        # Add handlers
-        self.application.add_handler(CommandHandler("start", self.start_handler))
-        self.application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), self.message_handler))
-        
-        # Start the bot in the background
-        self.is_running = True
-        await self.application.initialize()
-        await self.application.start()
-        await self.application.updater.start_polling()
-        
-        # Set persistent menu button
+        """Set the main bot menu button to open the Web App"""
         try:
-            await self.set_menu_button()
+            await self.application.bot.set_chat_menu_button(
+                menu_button={"type": "web_app", "text": "Ilovani Ochish", "web_app": {"url": self.app_url}}
+            )
+            logger.info("Menu button set successfully")
         except Exception as e:
-            print(f"Menu button o'rnatishda xatolik: {e}")
-            
-        print("Telegram Bot muvaffaqiyatli ishga tushdi!")
+            logger.error(f"Error setting menu button: {e}")
 
     async def start_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        args = context.args
-        
-        # Deep link handling (Quiz sharing)
-        if args and args[0].startswith("q_"):
-            quiz_id = args[0][2:]
-            quiz = get_quiz_from_memory(quiz_id)
-            
-            if not quiz:
-                await update.message.reply_text("Kechirasiz, bu quiz topilmadi yoki muddati o'tgan. ❌")
+        try:
+            if not update.message:
                 return
 
-            await update.message.reply_text(
-                f"✅ **{quiz.title}** topildi!\n"
-                f"Bu quiz {len(quiz.questions)} ta savoldan iborat.\n\n"
-                "Tayyor bo'lsangiz, quyida savollarni Quiz (Poll) shaklida yuboraman. Ularni guruhga Forward qilishingiz mumkin."
-            )
-
-            for i, q in enumerate(quiz.questions):
-                options = [opt for opt in q.options.values()]
-                correct_index = list(q.options.keys()).index(q.correct_answer)
+            args = context.args
+            logger.info(f"Start command received in {update.effective_chat.type} with args: {args}")
+            
+            # Deep link handling (Quiz sharing)
+            if args and args[0].startswith("q_"):
+                quiz_id = args[0][2:]
+                quiz = get_quiz_from_memory(quiz_id)
                 
-                await context.bot.send_poll(
-                    chat_id=update.effective_chat.id,
-                    question=f"{i+1}. {q.question}",
-                    options=options,
-                    type=Poll.QUIZ,
-                    correct_option_id=correct_index,
-                    is_anonymous=False,
-                    explanation="Testify AI tomonidan tuzildi."
+                if not quiz:
+                    await update.message.reply_text(
+                        "Kechirasiz, bu quiz topilmadi yoki muddati o'tgan. ❌\n"
+                        "Ilova yangilangan bo'lishi mumkin. Iltimos, quizingizni qayta yaratib ko'ring."
+                    )
+                    return
+
+                await update.message.reply_text(
+                    f"✅ **{quiz.title}** topildi!\n"
+                    f"Bu quiz {len(quiz.quiz)} ta savoldan iborat.\n\n"
+                    "Savollarni birma-bir Quiz (Poll) shaklida yuboryapman... 👇",
+                    parse_mode='Markdown'
                 )
-                await asyncio.sleep(0.5)
-            return
 
-        # Regular Start / Onboarding
-        keyboard = [
-            [InlineKeyboardButton("🚀 Ilovani Ochish", web_app=WebAppInfo(url=self.app_url))],
-            [InlineKeyboardButton("📖 Yo'riqnoma", callback_data="help"), InlineKeyboardButton("📢 Kanalimiz", url="https://t.me/testify_news")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+                for i, q in enumerate(quiz.quiz):
+                    options = [opt for opt in q.options.values()]
+                    # Map the correct answer (usually A, B, C, D) to its index
+                    opt_keys = list(q.options.keys())
+                    try:
+                        correct_index = opt_keys.index(q.correct_answer)
+                    except ValueError:
+                        correct_index = 0 # Fallback
+                    
+                    try:
+                        await context.bot.send_poll(
+                            chat_id=update.effective_chat.id,
+                            question=f"{i+1}. {q.question}",
+                            options=options,
+                            type=Poll.QUIZ,
+                            correct_option_id=correct_index,
+                            is_anonymous=False,
+                            explanation="To'g'ri javobni tanlang."
+                        )
+                        await asyncio.sleep(0.3)
+                    except Exception as poll_error:
+                        logger.error(f"Error sending poll {i}: {poll_error}")
+                        await update.message.reply_text(f"Savol {i+1} ni yuborishda xatolik: {poll_error}")
+                return
 
-        await update.message.reply_text(
-            "Assalomu alaykum! **Testify AI** botiga xush kelibsiz! ✨\n\n"
-            "Mening yordamimda siz:\n"
-            "1️⃣ PDF yoki boshqa matnlardan darrov Quiz yaratishingiz\n"
-            "2️⃣ Bilimingizni sinashingiz\n"
-            "3️⃣ Quizlarni guruhlarda o'tkazishingiz mumkin.\n\n"
-            "Ilovani boshlash uchun tugmani bosing: 👇",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
+            # Regular Start / Onboarding
+            keyboard = [
+                [InlineKeyboardButton("🚀 Ilovani Ochish", web_app=WebAppInfo(url=self.app_url))],
+                [InlineKeyboardButton("📖 Yo'riqnoma", callback_data="help"), InlineKeyboardButton("📢 Kanalimiz", url="https://t.me/testify_news")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await update.message.reply_text(
+                "Assalomu alaykum! **Testify AI** botiga xush kelibsiz! ✨\n\n"
+                "Mening yordamimda siz:\n"
+                "1️⃣ PDF yoki boshqa matnlardan darrov Quiz yaratishingiz\n"
+                "2️⃣ Bilimingizni sinashingiz\n"
+                "3️⃣ Quizlarni guruhlarda o'tkazishingiz mumkin.\n\n"
+                "Ilovani boshlash uchun pastdagi tugmani bosing: 👇",
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            logger.error(f"Error in start_handler: {e}")
 
     async def message_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text(
-            "Men faqat buyruqlarga javob bera olaman. Ilovani ishlash uchun pastdagi 'Ilovani Ochish' tugmasini bosing. 👇"
-        )
+        if update.message and update.effective_chat.type == "private":
+            await update.message.reply_text(
+                "Men faqat buyruqlarga javob bera olaman. Ilovani ishlash uchun pastdagi 'Ilovani Ochish' tugmasini bosing. 👇"
+            )
 
     def run_in_background(self):
         if not self.token or self.token == "your-telegram-bot-token-here":
+            logger.warning("Telegram Bot Token topilmadi. Bot o'chirilgan.")
             return
             
         def run():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(self.start_bot())
-            loop.run_forever()
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                self.application = ApplicationBuilder().token(self.token).build()
+                self.application.add_handler(CommandHandler("start", self.start_handler))
+                self.application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), self.message_handler))
+                
+                # Start bot persistent setup
+                loop.run_until_complete(self.application.initialize())
+                loop.run_until_complete(self.application.start())
+                loop.run_until_complete(self.application.updater.start_polling())
+                loop.run_until_complete(self.set_menu_button())
+                
+                logger.info("Telegram Bot polling started successfully in background thread")
+                loop.run_forever()
+            except Exception as e:
+                logger.error(f"Critical error in Telegram Bot thread: {e}")
 
         thread = threading.Thread(target=run, daemon=True)
         thread.start()

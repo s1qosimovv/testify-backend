@@ -73,24 +73,27 @@ MATN:
     
     # Parse JSON
     try:
-        # Try primary model
-        model_name = settings.GEMINI_MODEL
-        model = genai.GenerativeModel(model_name)
-        
-        try:
-            response = await model.generate_content_async(prompt)
-            content = response.text
-        except Exception as e:
-            error_str = str(e)
-            # If 429 (Quota) or 404 (Not Found), try fallback
-            if "429" in error_str or "404" in error_str:
-                print(f"DEBUG: Primary model {model_name} failed ({error_str}). Trying fallback...")
-                fallback_model = "gemini-1.5-flash" if "2.0" in model_name else "gemini-pro"
-                model = genai.GenerativeModel(fallback_model)
+        # Try a list of models in order of preference
+        models_to_try = [settings.GEMINI_MODEL, "gemini-flash-latest", "gemini-pro-latest"]
+        content = None
+        last_error = ""
+
+        for model_name in models_to_try:
+            try:
+                print(f"DEBUG: Attempting with {model_name}...")
+                model = genai.GenerativeModel(model_name)
                 response = await model.generate_content_async(prompt)
                 content = response.text
-            else:
-                raise e
+                if content:
+                    print(f"DEBUG: Success with {model_name}")
+                    break
+            except Exception as e:
+                last_error = str(e)
+                print(f"DEBUG: Model {model_name} failed: {last_error}")
+                continue
+        
+        if not content:
+             raise HTTPException(status_code=500, detail=f"Barcha AI modellari band yoki xato berdi: {last_error}")
 
         # Clean up Markdown code blocks
         if "```json" in content:
@@ -100,6 +103,8 @@ MATN:
         content = content.strip()
         
         quiz_data = json.loads(content)
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"DEBUG: Quiz Generation Error. Details: {str(e)}")
         raise HTTPException(status_code=500, detail=f"AI model xatosi: {str(e)}")

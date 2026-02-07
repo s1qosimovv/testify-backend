@@ -72,7 +72,7 @@ MATN:
 """
     
     # Initialize model
-    model = genai.GenerativeModel(settings.OPENAI_MODEL)
+    model = genai.GenerativeModel(settings.GEMINI_MODEL)
     
     # Generate content
     response = model.generate_content(prompt)

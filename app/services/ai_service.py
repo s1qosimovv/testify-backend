@@ -105,7 +105,7 @@ MATN:
                     status_code=429, 
                     detail="Gemini AI limiti tugadi (Free Tier). Iltimos, 1 daqiqa kuting yoki boshqa matn yuboring. ⏳"
                 )
-             raise HTTPException(status_code=500, detail=f"AI band: {last_error[:100]}")
+            raise HTTPException(status_code=500, detail=f"AI band: {last_error[:100]}")
 
         # Clean up Markdown code blocks
         if "```json" in content:

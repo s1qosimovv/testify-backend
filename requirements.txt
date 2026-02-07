@@ -1,0 +1,10 @@
+fastapi[standard]
+uvicorn[standard]
+python-multipart
+python-dotenv
+pydantic>=2.0.0
+google-generativeai
+aiohttp
+PyMuPDF
+python-docx
+python-telegram-bot

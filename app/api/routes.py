@@ -68,7 +68,8 @@ async def get_telegram_link(quiz_id: str):
     from app.config import settings
     import os
     
-    bot_username = os.getenv("TELEGRAM_BOT_USERNAME", "testify_quiz_bot") # Fallback to a placeholder
-    share_link = f"https://t.me/{bot_username}?start=q_{quiz_id}"
+    bot_username = os.getenv("TELEGRAM_BOT_USERNAME", "TestifyHub_bot")
+    # Using startgroup instead of start to allow adding to groups
+    share_link = f"https://t.me/{bot_username}?startgroup=q_{quiz_id}"
     
     return {"share_link": share_link}

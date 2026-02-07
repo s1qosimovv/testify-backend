@@ -13,6 +13,11 @@ class Settings:
     HOST: str = os.getenv("HOST", "0.0.0.0")
     PORT: int = int(os.getenv("PORT", "8000"))
     
+    # Telegram Settings
+    TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    TELEGRAM_BOT_USERNAME: str = os.getenv("TELEGRAM_BOT_USERNAME", "TestifyHub_bot")
+    WEB_APP_URL: str = os.getenv("WEB_APP_URL", "https://s1qosimovv.github.io/testify-frontend/")
+    
     # File upload settings
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10MB
     ALLOWED_EXTENSIONS: set = {".pdf", ".docx", ".txt"}

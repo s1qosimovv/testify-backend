@@ -9,6 +9,8 @@ class Question(BaseModel):
 
 class Quiz(BaseModel):
     """Complete quiz model"""
+    title: str = "AI Quiz"
+    description: str = ""
     quiz: List[Question]
 
 class TextInput(BaseModel):

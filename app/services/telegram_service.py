@@ -4,8 +4,7 @@ import logging
 import threading
 from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup, Poll, ReplyKeyboardMarkup, WebAppInfo
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
-from app.services.quiz_service import get_quiz_from_memory
-from app.models.quiz import Quiz
+from app.config import settings
 
 # Configure logging
 logging.basicConfig(
@@ -32,8 +31,8 @@ def _save_session(user_id, quiz_id):
 
 class TelegramQuizBot:
     def __init__(self):
-        self.token = os.getenv("TELEGRAM_BOT_TOKEN")
-        self.app_url = os.getenv("WEB_APP_URL", "https://s1qosimovv.github.io/testify-frontend/")
+        self.token = settings.TELEGRAM_BOT_TOKEN
+        self.app_url = settings.WEB_APP_URL
         self.application = None
 
     async def set_menu_button(self):
@@ -77,9 +76,10 @@ class TelegramQuizBot:
             if quiz_id:
                 try:
                     quiz = get_quiz_from_memory(quiz_id)
+                    title = getattr(quiz, 'title', 'Yangi Quiz')
                     
                     await update.message.reply_text(
-                        f"✅ **{quiz.title}** topildi!\n"
+                        f"✅ **{title}** topildi!\n"
                         f"Bu quiz {len(quiz.quiz)} ta savoldan iborat.\n\n"
                         "Savollarni birma-bir yuboryapman... 👇",
                         parse_mode='Markdown'

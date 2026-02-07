@@ -11,12 +11,14 @@ class Quiz(BaseModel):
     """Complete quiz model"""
     title: str = "AI Quiz"
     description: str = ""
+    time_per_question: int = 30  # New field for Telegram sequence
     quiz: List[Question]
 
 class TextInput(BaseModel):
     """Input model for text-based quiz generation"""
     text: str
     num_questions: int = 10
+    time_per_question: int = 30
 
 class AnswerSubmission(BaseModel):
     """User's answers submission"""

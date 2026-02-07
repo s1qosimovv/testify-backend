@@ -35,7 +35,11 @@ async def create_quiz(input_data: TextInput):
     
     # Generate quiz using AI
     try:
-        quiz = await generate_quiz(input_data.text, num_questions=input_data.num_questions)
+        quiz = await generate_quiz(
+            input_data.text, 
+            num_questions=input_data.num_questions,
+            time_per_question=input_data.time_per_question
+        )
     except Exception as e:
         print(f"Error generating quiz: {e}")
         raise HTTPException(status_code=500, detail=str(e))

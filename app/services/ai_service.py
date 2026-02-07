@@ -8,7 +8,7 @@ from app.models.quiz import Quiz
 # Configure Gemini API
 genai.configure(api_key=settings.GEMINI_API_KEY)
 
-async def generate_quiz(text: str, num_questions: int = 10) -> Quiz:
+async def generate_quiz(text: str, num_questions: int = 10, time_per_question: int = 30) -> Quiz:
     """
     Generate quiz questions from text using Google Gemini API
     
@@ -110,6 +110,8 @@ MATN:
         raise HTTPException(status_code=500, detail=f"AI model xatosi: {str(e)}")
     
     # Validate and return as Quiz model
-    return Quiz(**quiz_data)
+    quiz = Quiz(**quiz_data)
+    quiz.time_per_question = time_per_question
+    return quiz
 
 

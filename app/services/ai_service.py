@@ -71,27 +71,38 @@ MATN:
 {text[:4000]}
 """
     
-    # Initialize model
-    model = genai.GenerativeModel(settings.GEMINI_MODEL)
-    
-    # Generate content
-    response = model.generate_content(prompt)
-    content = response.text
-    
-    # Clean up Markdown code blocks if present
-    if "```json" in content:
-        content = content.replace("```json", "").replace("```", "")
-    elif "```" in content:
-        content = content.replace("```", "")
-        
-    content = content.strip()
-    
     # Parse JSON
     try:
+        # Try primary model
+        model_name = settings.GEMINI_MODEL
+        model = genai.GenerativeModel(model_name)
+        
+        try:
+            response = await model.generate_content_async(prompt)
+            content = response.text
+        except Exception as e:
+            error_str = str(e)
+            # If 429 (Quota) or 404 (Not Found), try fallback
+            if "429" in error_str or "404" in error_str:
+                print(f"DEBUG: Primary model {model_name} failed ({error_str}). Trying fallback...")
+                fallback_model = "gemini-1.5-flash" if "2.0" in model_name else "gemini-pro"
+                model = genai.GenerativeModel(fallback_model)
+                response = await model.generate_content_async(prompt)
+                content = response.text
+            else:
+                raise e
+
+        # Clean up Markdown code blocks
+        if "```json" in content:
+            content = content.replace("```json", "").replace("```", "")
+        elif "```" in content:
+            content = content.replace("```", "")
+        content = content.strip()
+        
         quiz_data = json.loads(content)
-    except json.JSONDecodeError as e:
-        print(f"DEBUG: JSON Decode Error. Content was: {content}")
-        raise e
+    except Exception as e:
+        print(f"DEBUG: Quiz Generation Error. Details: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"AI model xatosi: {str(e)}")
     
     # Validate and return as Quiz model
     return Quiz(**quiz_data)

@@ -80,10 +80,10 @@ MATN:
         last_error = ""
         is_rate_limit = False
 
-        for model_name in models_to_try:
+        for attempt, model_name in enumerate(models_to_try):
             if not model_name: continue
             try:
-                print(f"DEBUG: Attempting with {model_name}...")
+                print(f"DEBUG: Attempt {attempt + 1}/{len(models_to_try)} with {model_name}...")
                 model = genai.GenerativeModel(model_name)
                 response = await model.generate_content_async(prompt)
                 content = response.text
@@ -93,11 +93,12 @@ MATN:
             except Exception as e:
                 last_error = str(e)
                 print(f"DEBUG: Model {model_name} failed: {last_error}")
-                if "429" in last_error or "quota" in last_error.lower():
+                if "429" in last_error or "quota" in last_error.lower() or "resource" in last_error.lower():
                     is_rate_limit = True
-                    # If it's a rate limit, don't spam other models immediately,
-                    # but maybe the next one in the list has a separate quota.
-                    await asyncio.sleep(1) 
+                    # Exponential backoff: wait 2^attempt seconds
+                    wait_time = min(2 ** attempt, 8)  # Max 8 seconds
+                    print(f"DEBUG: Rate limit detected. Waiting {wait_time}s before retry...")
+                    await asyncio.sleep(wait_time)
                 continue
         
         if not content:

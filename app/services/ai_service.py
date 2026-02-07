@@ -6,7 +6,7 @@ from app.config import settings
 from app.models.quiz import Quiz
 
 # Configure Gemini API
-genai.configure(api_key=settings.OPENAI_API_KEY)
+genai.configure(api_key=settings.GEMINI_API_KEY)
 
 async def generate_quiz(text: str, num_questions: int = 10) -> Quiz:
     """
@@ -23,10 +23,10 @@ async def generate_quiz(text: str, num_questions: int = 10) -> Quiz:
         HTTPException: If API call fails or response is invalid
     """
     
-    if not settings.OPENAI_API_KEY:
+    if not settings.GEMINI_API_KEY:
         raise HTTPException(
             status_code=500,
-            detail="Gemini API key not configured"
+            detail="Gemini API key not configured (GEMINI_API_KEY)"
         )
     
     # Create production-ready prompt for quiz generation

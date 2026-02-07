@@ -6,9 +6,10 @@ load_dotenv()
 class Settings:
     """Application settings loaded from environment variables"""
     
-    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
-    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
-    MAX_TOKENS: int = int(os.getenv("MAX_TOKENS", "1500"))
+    # API Settings (Gemini)
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", os.getenv("OPENAI_API_KEY", ""))
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", os.getenv("OPENAI_MODEL", "gemini-1.5-flash"))
+    MAX_TOKENS: int = int(os.getenv("MAX_TOKENS", "8192"))
     HOST: str = os.getenv("HOST", "0.0.0.0")
     PORT: int = int(os.getenv("PORT", "8000"))
     

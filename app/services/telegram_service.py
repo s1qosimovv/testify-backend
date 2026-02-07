@@ -52,34 +52,36 @@ class TelegramQuizBot:
                 return
 
             user_id = update.effective_user.id
+            chat_id = update.effective_chat.id
             args = context.args
-            logger.info(f"Start command from {user_id} in {update.effective_chat.type} with args: {args}")
+            logger.info(f"Start command from {user_id} in {update.effective_chat.type} ({chat_id}) with args: {args}")
             
             quiz_id = None
             
             # 1. Check deep link args
-            if args and args[0].startswith("q_"):
-                quiz_id = args[0][2:]
-                _save_session(user_id, quiz_id)
-            
-            # 2. Check if it's a deep link from startgroup (startgroup=q_...)
-            elif args and args[0].startswith("startgroup_q_"):
-                quiz_id = args[0][13:]
-                _save_session(user_id, quiz_id)
+            if args and len(args) > 0:
+                payload = args[0]
+                if payload.startswith("q_"):
+                    quiz_id = payload[2:]
+                    _save_session(user_id, quiz_id)
+                elif payload.startswith("startgroup_q_"):
+                    quiz_id = payload[13:]
+                    _save_session(user_id, quiz_id)
 
-            # 3. If no args, try to fetch last session
+            # 2. If no args, try to fetch last session
             if not quiz_id:
                 sessions = _load_sessions()
                 quiz_id = sessions.get(str(user_id))
+                logger.debug(f"Fetched session quiz_id for {user_id}: {quiz_id}")
 
             if quiz_id:
-                quiz = get_quiz_from_memory(quiz_id)
-                
-                if quiz:
+                try:
+                    quiz = get_quiz_from_memory(quiz_id)
+                    
                     await update.message.reply_text(
                         f"✅ **{quiz.title}** topildi!\n"
                         f"Bu quiz {len(quiz.quiz)} ta savoldan iborat.\n\n"
-                        "Savollarni birma-bir Quiz (Poll) shaklida yuboryapman... 👇",
+                        "Savollarni birma-bir yuboryapman... 👇",
                         parse_mode='Markdown'
                     )
 
@@ -92,7 +94,7 @@ class TelegramQuizBot:
                             correct_index = 0
                         
                         await context.bot.send_poll(
-                            chat_id=update.effective_chat.id,
+                            chat_id=chat_id,
                             question=f"{i+1}. {q.question}",
                             options=options,
                             type=Poll.QUIZ,
@@ -102,23 +104,50 @@ class TelegramQuizBot:
                         )
                         await asyncio.sleep(0.3)
                     return
+                except Exception as quiz_err:
+                    logger.error(f"Quiz loading error: {quiz_err}")
+                    await update.message.reply_text(
+                        f"❌ Kechirasiz, quizingizni yuklashda xatolik: {str(quiz_err)}\n"
+                        "Ehtimol, server yangilangani uchun xotira o'chib ketgan. Iltimos, ilovada yangi quiz yarating."
+                    )
+                    return
             
             # If still no quiz, show general onboarding
-            keyboard = [
-                [InlineKeyboardButton("🚀 Ilovani Ochish", web_app=WebAppInfo(url=self.app_url))],
-                [InlineKeyboardButton("📖 Yo'riqnoma", callback_data="help"), InlineKeyboardButton("📢 Kanalimiz", url="https://t.me/testify_news")]
-            ]
+            keyboard = [[InlineKeyboardButton("� Ilovani Ochish", web_app=WebAppInfo(url=self.app_url))]]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             await update.message.reply_text(
                 "Assalomu alaykum! **Testify AI** botiga xush kelibsiz! ✨\n\n"
-                "Ilovada Quiz yarating va natija ekranidagi 'GURUHDA ISHLATISH' tugmasini bosing.\n\n"
-                "Siz bu guruhda `/start@TestifyHub_bot` buyrug'ini yozsangiz, eng oxirgi yaratilgan quizingiz chiqadi. 👇",
+                "Sizda hali faol quiz seansi yo'q ekan. Quizingizni boshlash uchun:\n"
+                "1. Pastdagi tugma orqali ilovaga kiring.\n"
+                "2. Fayl yuklab test yarating.\n"
+                "3. Natija ekranidagi 'Guruhda ishlatish' tugmasini bosing.\n\n"
+                "Shundan so'ng bu guruhda `/start@TestifyHub_bot` buyrug'i ishlaydi! 👇",
                 reply_markup=reply_markup,
                 parse_mode='Markdown'
             )
         except Exception as e:
             logger.error(f"Error in start_handler: {e}")
+            try:
+                await update.message.reply_text(f"⚠️ Botda texnik xatolik: {str(e)}")
+            except: pass
+
+    async def ping_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text("Pong! 🏓 Bot ishlayapti.")
+
+    async def debug_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_id = update.effective_user.id
+        sessions = _load_sessions()
+        last_quiz = sessions.get(str(user_id), "Yo'q")
+        
+        status = (
+            f"🔍 **Debug Ma'lumotlari**\n"
+            f"User ID: `{user_id}`\n"
+            f"Chat ID: `{update.effective_chat.id}`\n"
+            f"Oxirgi Quiz: `{last_quiz}`\n"
+            f"Server holati: ✅ Ishlayapti"
+        )
+        await update.message.reply_text(status, parse_mode='Markdown')
 
     async def message_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.message and update.effective_chat.type == "private":
@@ -138,6 +167,8 @@ class TelegramQuizBot:
                 
                 self.application = ApplicationBuilder().token(self.token).build()
                 self.application.add_handler(CommandHandler("start", self.start_handler))
+                self.application.add_handler(CommandHandler("ping", self.ping_handler))
+                self.application.add_handler(CommandHandler("debug", self.debug_handler))
                 self.application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), self.message_handler))
                 
                 loop.run_until_complete(self.application.initialize())
@@ -145,7 +176,7 @@ class TelegramQuizBot:
                 loop.run_until_complete(self.application.updater.start_polling())
                 loop.run_until_complete(self.set_menu_button())
                 
-                logger.info("Telegram Bot polling started successfully in background thread")
+                logger.info("Telegram Bot polling started successfully")
                 loop.run_forever()
             except Exception as e:
                 logger.error(f"Critical error in Telegram Bot thread: {e}")

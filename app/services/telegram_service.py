@@ -4,6 +4,7 @@ import logging
 import threading
 from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup, Poll, ReplyKeyboardMarkup, WebAppInfo
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
+from app.services.quiz_service import get_quiz_from_memory
 from app.config import settings
 
 # Configure logging

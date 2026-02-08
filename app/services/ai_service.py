@@ -85,48 +85,66 @@ MATN:
         content = None
         last_error = ""
         is_rate_limit = False
-
-        for model_name in models_to_try:
-            # For each model, try up to 3 times with backoff
-            for attempt in range(3):
-                try:
-                    print(f"DEBUG: Trying {model_name} (Attempt {attempt + 1})...")
-                    model = genai.GenerativeModel(model_name)
-                    # Set generation config to ensure JSON response
-                    generation_config = genai.GenerationConfig(
-                        response_mime_type="application/json"
-                    )
-                    
-                    response = await model.generate_content_async(
-                        prompt, 
-                        generation_config=generation_config
-                    )
-                    content = response.text
-                    if content:
-                        print(f"DEBUG: Success with {model_name}")
-                        break
-                except Exception as e:
-                    last_error = str(e)
-                    print(f"DEBUG: Model {model_name} attempt {attempt+1} failed: {last_error}")
-                    
-                    if "429" in last_error or "quota" in last_error.lower() or "resource" in last_error.lower():
-                        is_rate_limit = True
-                        # Exponential backoff: 2s, 4s, 8s
-                        wait_time = 2 ** (attempt + 1)
-                        print(f"DEBUG: Rate limit on {model_name}. Waiting {wait_time}s...")
-                        await asyncio.sleep(wait_time)
-                    else:
-                        # If it's not a rate limit (e.g. model not found), switch to next model immediately
-                        break
-            
-            if content:
-                break
         
+        # Get available keys
+        api_keys = settings.GEMINI_API_KEYS
+        if not api_keys:
+             raise HTTPException(status_code=500, detail="API keys not configured")
+
+        # Try each API Key
+        for key_index, api_key in enumerate(api_keys):
+            print(f"DEBUG: Using API Key #{key_index + 1} ({api_key[:5]}...)")
+            genai.configure(api_key=api_key)
+            
+            # Try models with this key
+            for model_name in models_to_try:
+                # For each model, try up to 2 times with backoff
+                for attempt in range(2):
+                    try:
+                        print(f"DEBUG: [Key #{key_index+1}] Trying {model_name} (Attempt {attempt + 1})...")
+                        model = genai.GenerativeModel(model_name)
+                        # Set generation config to ensure JSON response
+                        generation_config = genai.GenerationConfig(
+                            response_mime_type="application/json"
+                        )
+                        
+                        response = await model.generate_content_async(
+                            prompt, 
+                            generation_config=generation_config
+                        )
+                        content = response.text
+                        if content:
+                            print(f"DEBUG: Success with {model_name} on Key #{key_index+1}")
+                            break
+                    except Exception as e:
+                        last_error = str(e)
+                        print(f"DEBUG: [Key #{key_index+1}] Model {model_name} attempt {attempt+1} failed: {last_error}")
+                        
+                        if "429" in last_error or "quota" in last_error.lower() or "resource" in last_error.lower():
+                            is_rate_limit = True
+                            # If we have more keys, break model loop and switch key immediately
+                            if key_index < len(api_keys) - 1:
+                                print(f"DEBUG: Key #{key_index+1} exhausted. Switching to next key...")
+                                break # Break model loop, continue to next key
+                            
+                            # If no more keys, wait and retry current key
+                            wait_time = 2 ** (attempt + 1)
+                            print(f"DEBUG: Rate limit on final key. Waiting {wait_time}s...")
+                            await asyncio.sleep(wait_time)
+                        else:
+                            # If it's not a rate limit (e.g. model not found), switch to next model immediately
+                            break
+                
+                if content: break # Break model loop
+                if is_rate_limit and key_index < len(api_keys) - 1: break # Break model loop to switch key
+
+            if content: break # Break key loop
+
         if not content:
             if is_rate_limit:
                 raise HTTPException(
                     status_code=429, 
-                    detail="⚠️ Server juda band. Gemini AI limiti tugadi. Iltimos, 1 daqiqa kuting va qayta urinib ko'ring."
+                    detail="⚠️ Barcha serverlar band (Kunlik limit tugadi). Iltimos, ertaga urinib ko'ring yoki developer bilan bog'laning."
                 )
             raise HTTPException(status_code=500, detail=f"AI xatosi: {last_error[:100]}")
 

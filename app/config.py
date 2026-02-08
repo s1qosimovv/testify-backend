@@ -7,7 +7,13 @@ class Settings:
     """Application settings loaded from environment variables"""
     
     # API Settings (Gemini)
-    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", os.getenv("OPENAI_API_KEY", ""))
+    # Support multiple keys separated by comma
+    _keys_str = os.getenv("GEMINI_API_KEY", os.getenv("OPENAI_API_KEY", ""))
+    GEMINI_API_KEYS: list[str] = [k.strip() for k in _keys_str.split(",") if k.strip()]
+    
+    # Keep backward compatibility for single key usage
+    GEMINI_API_KEY: str = GEMINI_API_KEYS[0] if GEMINI_API_KEYS else ""
+
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", os.getenv("OPENAI_MODEL", "gemini-2.0-flash"))
     MAX_TOKENS: int = int(os.getenv("MAX_TOKENS", "8192"))
     HOST: str = os.getenv("HOST", "0.0.0.0")

@@ -74,40 +74,61 @@ MATN:
     
     # Parse JSON
     try:
-        # Try a list of models in order of preference
-        models_to_try = [settings.GEMINI_MODEL, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+        # Try a list of models in order of preference for speed and rate limits
+        # gemini-1.5-flash is usually the fastest and most stable for free tier
+        models_to_try = ["gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-2.0-flash-exp", "gemini-1.5-pro"]
+        
+        # If user has a specific model in settings, try it first
+        if settings.GEMINI_MODEL and settings.GEMINI_MODEL not in models_to_try:
+            models_to_try.insert(0, settings.GEMINI_MODEL)
+            
         content = None
         last_error = ""
         is_rate_limit = False
 
-        for attempt, model_name in enumerate(models_to_try):
-            if not model_name: continue
-            try:
-                print(f"DEBUG: Attempt {attempt + 1}/{len(models_to_try)} with {model_name}...")
-                model = genai.GenerativeModel(model_name)
-                response = await model.generate_content_async(prompt)
-                content = response.text
-                if content:
-                    print(f"DEBUG: Success with {model_name}")
-                    break
-            except Exception as e:
-                last_error = str(e)
-                print(f"DEBUG: Model {model_name} failed: {last_error}")
-                if "429" in last_error or "quota" in last_error.lower() or "resource" in last_error.lower():
-                    is_rate_limit = True
-                    # Exponential backoff: wait 2^attempt seconds
-                    wait_time = min(2 ** attempt, 8)  # Max 8 seconds
-                    print(f"DEBUG: Rate limit detected. Waiting {wait_time}s before retry...")
-                    await asyncio.sleep(wait_time)
-                continue
+        for model_name in models_to_try:
+            # For each model, try up to 3 times with backoff
+            for attempt in range(3):
+                try:
+                    print(f"DEBUG: Trying {model_name} (Attempt {attempt + 1})...")
+                    model = genai.GenerativeModel(model_name)
+                    # Set generation config to ensure JSON response
+                    generation_config = genai.GenerationConfig(
+                        response_mime_type="application/json"
+                    )
+                    
+                    response = await model.generate_content_async(
+                        prompt, 
+                        generation_config=generation_config
+                    )
+                    content = response.text
+                    if content:
+                        print(f"DEBUG: Success with {model_name}")
+                        break
+                except Exception as e:
+                    last_error = str(e)
+                    print(f"DEBUG: Model {model_name} attempt {attempt+1} failed: {last_error}")
+                    
+                    if "429" in last_error or "quota" in last_error.lower() or "resource" in last_error.lower():
+                        is_rate_limit = True
+                        # Exponential backoff: 2s, 4s, 8s
+                        wait_time = 2 ** (attempt + 1)
+                        print(f"DEBUG: Rate limit on {model_name}. Waiting {wait_time}s...")
+                        await asyncio.sleep(wait_time)
+                    else:
+                        # If it's not a rate limit (e.g. model not found), switch to next model immediately
+                        break
+            
+            if content:
+                break
         
         if not content:
             if is_rate_limit:
                 raise HTTPException(
                     status_code=429, 
-                    detail="Gemini AI limiti tugadi (Free Tier). Iltimos, 1 daqiqa kuting yoki boshqa matn yuboring. ⏳"
+                    detail="⚠️ Server juda band. Gemini AI limiti tugadi. Iltimos, 1 daqiqa kuting va qayta urinib ko'ring."
                 )
-            raise HTTPException(status_code=500, detail=f"AI band: {last_error[:100]}")
+            raise HTTPException(status_code=500, detail=f"AI xatosi: {last_error[:100]}")
 
         # Clean up Markdown code blocks
         if "```json" in content:
